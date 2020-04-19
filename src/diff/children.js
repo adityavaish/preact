@@ -12,7 +12,7 @@ import { getDomSibling } from '../component';
  * node whose children should be diff'ed against oldParentVNode
  * @param {import('../internal').VNode} oldParentVNode The old virtual
  * node whose children should be diff'ed against newParentVNode
- * @param {object} context The current context object
+ * @param {object} globalContext The current context object - modified by getChildContext
  * @param {boolean} isSvg Whether or not this DOM node is an SVG node
  * @param {Array<import('../internal').PreactElement>} excessDomChildren
  * @param {Array<import('../internal').Component>} commitQueue List of components
@@ -27,7 +27,7 @@ export function diffChildren(
 	parentDom,
 	newParentVNode,
 	oldParentVNode,
-	context,
+	globalContext,
 	isSvg,
 	excessDomChildren,
 	commitQueue,
@@ -103,7 +103,7 @@ export function diffChildren(
 					parentDom,
 					childVNode,
 					oldVNode,
-					context,
+					globalContext,
 					isSvg,
 					excessDomChildren,
 					commitQueue,
@@ -124,17 +124,17 @@ export function diffChildren(
 					}
 
 					let nextDom;
-					if (childVNode._lastDomChildSibling !== undefined) {
+					if (childVNode._nextDom !== undefined) {
 						// Only Fragments or components that return Fragment like VNodes will
-						// have a non-undefined _lastDomChildSibling. Continue the diff from the sibling
+						// have a non-undefined _nextDom. Continue the diff from the sibling
 						// of last DOM child of this child VNode
-						nextDom = childVNode._lastDomChildSibling;
+						nextDom = childVNode._nextDom;
 
-						// Eagerly cleanup _lastDomChildSibling. We don't need to persist the value because
+						// Eagerly cleanup _nextDom. We don't need to persist the value because
 						// it is only used by `diffChildren` to determine where to resume the diff after
 						// diffing Components and Fragments. Once we store it the nextDOM local var, we
 						// can clean up the property
-						childVNode._lastDomChildSibling = undefined;
+						childVNode._nextDom = undefined;
 					} else if (
 						excessDomChildren == oldVNode ||
 						newDom != oldDom ||
@@ -188,15 +188,23 @@ export function diffChildren(
 
 					if (typeof newParentVNode.type == 'function') {
 						// Because the newParentVNode is Fragment-like, we need to set it's
-						// _lastDomChildSibling property to the nextSibling of its last child DOM node.
+						// _nextDom property to the nextSibling of its last child DOM node.
 						//
 						// `oldDom` contains the correct value here because if the last child
-						// is a Fragment-like, then oldDom has already been set to that child's _lastDomChildSibling.
+						// is a Fragment-like, then oldDom has already been set to that child's _nextDom.
 						// If the last child is a DOM VNode, then oldDom will be set to that DOM
 						// node's nextSibling.
 
-						newParentVNode._lastDomChildSibling = oldDom;
+						newParentVNode._nextDom = oldDom;
 					}
+				} else if (
+					oldDom &&
+					oldVNode._dom == oldDom &&
+					oldDom.parentNode != parentDom
+				) {
+					// The above condition is to handle null placeholders. See test in placeholder.test.js:
+					// `efficiently replace null placeholders in parent rerenders`
+					oldDom = getDomSibling(oldVNode);
 				}
 			}
 
@@ -208,7 +216,7 @@ export function diffChildren(
 	newParentVNode._dom = firstChildDom;
 
 	// Remove children that are not part of any vnode.
-	if (excessDomChildren != null && typeof newParentVNode.type !== 'function') {
+	if (excessDomChildren != null && typeof newParentVNode.type != 'function') {
 		for (i = excessDomChildren.length; i--; ) {
 			if (excessDomChildren[i] != null) removeNode(excessDomChildren[i]);
 		}
@@ -239,7 +247,7 @@ export function diffChildren(
 export function toChildArray(children, callback, flattened) {
 	if (flattened == null) flattened = [];
 
-	if (children == null || typeof children === 'boolean') {
+	if (children == null || typeof children == 'boolean') {
 		if (callback) flattened.push(callback(null));
 	} else if (Array.isArray(children)) {
 		for (let i = 0; i < children.length; i++) {
@@ -247,11 +255,19 @@ export function toChildArray(children, callback, flattened) {
 		}
 	} else if (!callback) {
 		flattened.push(children);
-	} else if (typeof children === 'string' || typeof children === 'number') {
-		flattened.push(callback(createVNode(null, children, null, null)));
+	} else if (typeof children == 'string' || typeof children == 'number') {
+		flattened.push(callback(createVNode(null, children, null, null, children)));
 	} else if (children._dom != null || children._component != null) {
 		flattened.push(
-			callback(createVNode(children.type, children.props, children.key, null))
+			callback(
+				createVNode(
+					children.type,
+					children.props,
+					children.key,
+					null,
+					children._original
+				)
+			)
 		);
 	} else {
 		flattened.push(callback(children));

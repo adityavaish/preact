@@ -433,6 +433,28 @@ describe('render()', () => {
 		expect(scratch.childNodes[0]).to.have.property('className', 'bar');
 	});
 
+	it('should support false aria-* attributes', () => {
+		render(<div aria-checked="false" />, scratch);
+		expect(scratch.firstChild.getAttribute('aria-checked')).to.equal('false');
+	});
+
+	it('should set checked attribute on custom elements without checked property', () => {
+		render(<o-checkbox checked />, scratch);
+		expect(scratch.innerHTML).to.equal(
+			'<o-checkbox checked="true"></o-checkbox>'
+		);
+	});
+
+	it('should set value attribute on custom elements without value property', () => {
+		render(<o-input value="test" />, scratch);
+		expect(scratch.innerHTML).to.equal('<o-input value="test"></o-input>');
+	});
+
+	it('should mask value on password input elements', () => {
+		render(<input value="xyz" type="password" />, scratch);
+		expect(scratch.innerHTML).to.equal('<input type="password">');
+	});
+
 	describe('style attribute', () => {
 		it('should apply style as String', () => {
 			render(<div style="top: 5px; position: relative;" />, scratch);
@@ -1479,5 +1501,66 @@ describe('render()', () => {
 				`${expectedA}${expectedB}${expectedC}`
 			);
 		});
+	});
+
+	it('should not call options.debounceRendering unnecessarily', () => {
+		let comp;
+
+		class A extends Component {
+			constructor(props) {
+				super(props);
+				this.state = { updates: 0 };
+				comp = this;
+			}
+
+			render() {
+				return <div>{this.state.updates}</div>;
+			}
+		}
+
+		render(<A />, scratch);
+		expect(scratch.innerHTML).to.equal('<div>0</div>');
+
+		const sandbox = sinon.createSandbox();
+		try {
+			sandbox.spy(options, 'debounceRendering');
+
+			comp.setState({ updates: 1 }, () => {
+				comp.setState({ updates: 2 });
+			});
+			rerender();
+			expect(scratch.innerHTML).to.equal('<div>2</div>');
+
+			expect(options.debounceRendering).to.have.been.calledOnce;
+		} finally {
+			sandbox.restore();
+		}
+	});
+
+	it('should unmount dangerouslySetInnerHTML', () => {
+		let set;
+
+		const TextDiv = () => (
+			<div dangerouslySetInnerHTML={{ __html: '' }}>some text</div>
+		);
+
+		class App extends Component {
+			constructor(props) {
+				super(props);
+				set = this.setState.bind(this);
+				this.state = { show: true };
+			}
+
+			render() {
+				return this.state.show && <TextDiv />;
+			}
+		}
+
+		render(<App />, scratch);
+		expect(scratch.innerHTML).to.equal('<div></div>');
+
+		set({ show: false });
+		rerender();
+		expect(scratch.innerHTML).to.equal('');
 	});
 });
