@@ -67,6 +67,7 @@
     "build:hooks": "microbundle build --raw --cwd hooks",
     "build:test-utils": "microbundle build --raw --cwd test-utils",
     "build:compat": "microbundle build --raw --cwd compat --globals 'preact/hooks=preactHooks'",
+    "build:webpack": "webpack webpack.config.js",
     "postbuild": "node ./config/node-13-exports.js",
     "dev": "microbundle watch --raw --format cjs",
     "dev:hooks": "microbundle watch --raw --format cjs --cwd hooks",
@@ -231,6 +232,7 @@
     "sinon": "^6.1.3",
     "sinon-chai": "^3.0.0",
     "typescript": "^3.0.1",
-    "webpack": "^4.3.0"
+    "webpack": "^4.42.1",
+    "webpack-cli": "^3.3.11"
   }
 }
