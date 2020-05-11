@@ -127,7 +127,7 @@ export function diff(
 							c._nextState,
 							componentContext
 						) === false) ||
-					(newVNode._original === oldVNode._original && !c._processingException)
+					newVNode._original === oldVNode._original
 				) {
 					c.props = newProps;
 					c.state = c._nextState;
@@ -171,13 +171,6 @@ export function diff(
 			c._parentDom = parentDom;
 
 			tmp = c.render(c.props, c.state, c.context);
-			let isTopLevelFragment =
-				tmp != null && tmp.type == Fragment && tmp.key == null;
-			newVNode._children = isTopLevelFragment
-				? tmp.props.children
-				: Array.isArray(tmp)
-				? tmp
-				: [tmp];
 
 			if (c.getChildContext != null) {
 				globalContext = assign(assign({}, globalContext), c.getChildContext());
@@ -187,8 +180,13 @@ export function diff(
 				snapshot = c.getSnapshotBeforeUpdate(oldProps, oldState);
 			}
 
+			let isTopLevelFragment =
+				tmp != null && tmp.type == Fragment && tmp.key == null;
+			let renderResult = isTopLevelFragment ? tmp.props.children : tmp;
+
 			diffChildren(
 				parentDom,
+				Array.isArray(renderResult) ? renderResult : [renderResult],
 				newVNode,
 				oldVNode,
 				globalContext,
@@ -345,7 +343,9 @@ function diffElementNodes(
 		// During hydration, props are not diffed at all (including dangerouslySetInnerHTML)
 		// @TODO we should warn in debug mode when props don't match here.
 		if (!isHydrating) {
-			if (oldProps === EMPTY_OBJ) {
+			// But, if we are in a situation where we are using existing DOM (e.g. replaceNode)
+			// we should read the existing DOM attributes to diff them
+			if (excessDomChildren != null) {
 				oldProps = {};
 				for (let i = 0; i < dom.attributes.length; i++) {
 					oldProps[dom.attributes[i].name] = dom.attributes[i].value;
@@ -366,9 +366,10 @@ function diffElementNodes(
 		if (newHtml) {
 			newVNode._children = [];
 		} else {
-			newVNode._children = newVNode.props.children;
+			i = newVNode.props.children;
 			diffChildren(
 				dom,
+				Array.isArray(i) ? i : [i],
 				newVNode,
 				oldVNode,
 				globalContext,
